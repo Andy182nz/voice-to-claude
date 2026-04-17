@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice to Claude</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Courier New', monospace;
+    background: #0d0d0d;
+    color: #e8e8e8;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+    user-select: none;
+  }
+
+  .app { width: 100%; max-width: 580px; }
+
+  .header { text-align: center; margin-bottom: 40px; }
+
+  .title {
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    color: #444;
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 30px;
+    font-weight: 700;
+    color: #f0f0f0;
+    letter-spacing: -0.02em;
+  }
+
+  .subtitle span { color: #4ade80; }
+
+  .orb-zone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 36px;
+  }
+
+  .orb {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 2px solid #2a2a2a;
+    background: #141414;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.3s, background 0.3s;
+    outline: none;
+    position: relative;
+  }
+
+  .orb:hover { border-color: #4ade80; }
+
+  .orb.recording { border-color: #ef4444; background: #1e1010; animation: rpulse 1.4s ease-in-out infinite; }
+  .orb.speaking  { border-color: #60a5fa; background: #101520; animation: spulse 1.2s ease-in-out infinite; }
+  .orb.confirming { border-color: #f59e0b; background: #161200; animation: cpulse 1.0s ease-in-out infinite; }
+
+  @keyframes rpulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.25); }
+    50% { box-shadow: 0 0 0 18px rgba(239,68,68,0); }
+  }
+  @keyframes spulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(96,165,250,0.25); }
+    50% { box-shadow: 0 0 0 18px rgba(96,165,250,0); }
+  }
+  @keyframes cpulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.3); }
+    50% { box-shadow: 0 0 0 18px rgba(245,158,11,0); }
+  }
+
+  .orb-icon { width: 38px; height: 38px; transition: all 0.2s; }
+  .orb-icon path, .orb-icon rect, .orb-icon line, .orb-icon circle { transition: fill 0.2s, stroke 0.2s; }
+
+  .orb-label {
+    margin-top: 18px;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #444;
+    height: 18px;
+    transition: color 0.2s;
+    text-align: center;
+  }
+
+  .orb-label.recording  { color: #ef4444; }
+  .orb-label.speaking   { color: #60a5fa; }
+  .orb-label.confirming { color: #f59e0b; }
+  .orb-label.active     { color: #4ade80; }
+
+  .phase-msg {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #555;
+    text-align: center;
+    min-height: 20px;
+    letter-spacing: 0.03em;
+  }
+
+  .output-section { position: relative; margin-bottom: 14px; }
+
+  .output-label {
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: #333;
+    margin-bottom: 8px;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 150px;
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 8px;
+    color: #ddd;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    padding: 14px 16px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+    user-select: text;
+  }
+
+  textarea.has-text { border-color: #2a3a2a; }
+  textarea::placeholder { color: #2a2a2a; }
+
+  .wordcount {
+    position: absolute;
+    bottom: 10px;
+    right: 12px;
+    font-size: 10px;
+    color: #2a2a2a;
+    pointer-events: none;
+  }
+
+  .actions { display: flex; gap: 8px; margin-bottom: 14px; }
+
+  .btn {
+    flex: 1;
+    padding: 11px 16px;
+    border: 1px solid #222;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    outline: none;
+    background: transparent;
+    color: #555;
+  }
+
+  .btn:hover { border-color: #444; color: #888; }
+
+  .btn-copy {
+    background: #4ade80;
+    border-color: #4ade80;
+    color: #0a1a0a;
+    font-weight: 700;
+  }
+
+  .btn-copy:hover { background: #22c55e; border-color: #22c55e; color: #0a1a0a; }
+  .btn-copy.copied { background: #1a2a1a; border-color: #4ade80; color: #4ade80; }
+
+  .voice-section {
+    background: #111;
+    border: 1px solid #1e1e1e;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+  }
+
+  .voice-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .voice-row:last-child { margin-bottom: 0; }
+
+  .vlabel {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #333;
+    min-width: 48px;
+  }
+
+  select {
+    flex: 1;
+    background: #0d0d0d;
+    border: 1px solid #222;
+    border-radius: 4px;
+    color: #bbb;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    padding: 5px 8px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type=range] { flex: 1; accent-color: #4ade80; cursor: pointer; }
+  .sval { font-size: 11px; color: #444; min-width: 36px; text-align: right; }
+
+  .hint {
+    text-align: center;
+    font-size: 10px;
+    color: #252525;
+    line-height: 2;
+    letter-spacing: 0.05em;
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="title">Desktop Tool</div>
+    <div class="subtitle">Voice <span>to</span> Claude</div>
+  </div>
+
+  <div class="orb-zone">
+    <button class="orb" id="orb" onclick="orbClicked()">
+      <svg class="orb-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="9" y="2" width="6" height="11" rx="3" fill="#666"/>
+        <path d="M5 11a7 7 0 0 0 14 0" stroke="#666" stroke-width="2" stroke-linecap="round"/>
+        <line x1="12" y1="18" x2="12" y2="22" stroke="#666" stroke-width="2" stroke-linecap="round"/>
+        <line x1="9" y1="22" x2="15" y2="22" stroke="#666" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </button>
+    <div class="orb-label" id="orbLabel">Click to start</div>
+    <div class="phase-msg" id="phaseMsg"></div>
+  </div>
+
+  <div class="output-section">
+    <div class="output-label">Transcription</div>
+    <textarea id="output" placeholder="Your words appear here..."></textarea>
+    <div class="wordcount" id="wordcount"></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-copy" id="copyBtn" onclick="manualCopy()">Copy</button>
+    <button class="btn" onclick="manualRead()">Read back</button>
+    <button class="btn" onclick="clearAll()">Clear</button>
+  </div>
+
+  <div class="voice-section">
+    <div class="voice-row">
+      <span class="vlabel">Voice</span>
+      <select id="voiceSelect" onchange="savePrefs()"></select>
+    </div>
+    <div class="voice-row">
+      <span class="vlabel">Speed</span>
+      <input type="range" id="speedRange" min="0.5" max="1.8" step="0.05" value="0.60" oninput="updateSpeed()">
+      <span class="sval" id="speedVal">0.60x</span>
+    </div>
+  </div>
+
+  <div class="hint">
+    Say "stop recording" when done. Say "yes" to copy or "no" to re-record.<br>
+    Works hands-free while you're in Photoshop.
+  </div>
+</div>
+
+<script>
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let voices = [];
+  let mainRec = null;
+  let confirmRec = null;
+  let finalText = '';
+  let interimText = '';
+
+  // Phases: idle, recording, speaking, confirming
+  let phase = 'idle';
+
+  const orb = document.getElementById('orb');
+  const orbLabel = document.getElementById('orbLabel');
+  const phaseMsg = document.getElementById('phaseMsg');
+  const outputEl = document.getElementById('output');
+  const wordcountEl = document.getElementById('wordcount');
+  const copyBtn = document.getElementById('copyBtn');
+  const voiceSelect = document.getElementById('voiceSelect');
+  const speedRange = document.getElementById('speedRange');
+  const speedVal = document.getElementById('speedVal');
+
+  // Voice loading
+  function loadVoices() {
+    voices = speechSynthesis.getVoices();
+    if (!voices.length) return;
+    const saved = localStorage.getItem('vtc_voice');
+    voiceSelect.innerHTML = '';
+    const en = voices.filter(v => v.lang.startsWith('en'));
+    const other = voices.filter(v => !v.lang.startsWith('en'));
+    const makeOpt = (v) => {
+      const o = document.createElement('option');
+      o.value = v.name;
+      o.textContent = v.name + ' (' + v.lang + ')';
+      if (v.name === saved) o.selected = true;
+      return o;
+    };
+    const g1 = document.createElement('optgroup');
+    g1.label = 'English'; en.forEach(v => g1.appendChild(makeOpt(v)));
+    voiceSelect.appendChild(g1);
+    if (other.length) {
+      const g2 = document.createElement('optgroup');
+      g2.label = 'Other'; other.forEach(v => g2.appendChild(makeOpt(v)));
+      voiceSelect.appendChild(g2);
+    }
+    if (!saved) {
+      const pick = en.find(v => v.name === 'Karen') || en.find(v => v.name === 'Samantha') || en[0];
+      if (pick) voiceSelect.value = pick.name;
+    }
+  }
+
+  speechSynthesis.onvoiceschanged = loadVoices;
+  loadVoices();
+
+  const sv = localStorage.getItem('vtc_speed');
+  if (sv) { speedRange.value = sv; speedVal.textContent = parseFloat(sv).toFixed(2) + 'x'; }
+
+  function updateSpeed() {
+    speedVal.textContent = parseFloat(speedRange.value).toFixed(2) + 'x';
+    savePrefs();
+  }
+
+  function savePrefs() {
+    localStorage.setItem('vtc_voice', voiceSelect.value);
+    localStorage.setItem('vtc_speed', speedRange.value);
+  }
+
+  // UI state
+  function setPhase(p, label, msg) {
+    phase = p;
+    orb.className = 'orb' + (p !== 'idle' ? ' ' + p : '');
+    orbLabel.className = 'orb-label' + (p !== 'idle' ? ' ' + p : p === 'idle' && outputEl.value.trim() ? ' active' : '');
+    orbLabel.textContent = label;
+    phaseMsg.textContent = msg || '';
+  }
+
+  // TTS
+  function speak(text, onDone) {
+    speechSynthesis.cancel();
+    if (!text.trim()) { if (onDone) onDone(); return; }
+    const utt = new SpeechSynthesisUtterance(text.trim());
+    utt.voice = voices.find(v => v.name === voiceSelect.value) || null;
+    utt.rate = parseFloat(speedRange.value);
+    utt.onend = () => { if (onDone) onDone(); };
+    utt.onerror = () => { if (onDone) onDone(); };
+    speechSynthesis.speak(utt);
+  }
+
+  // After readback, ask the question out loud then listen for yes/no
+  function askConfirm() {
+    setPhase('speaking', 'Asking...', '');
+    speak('Did that sound right? Say yes to copy, or no to record again.', () => {
+      listenForConfirm();
+    });
+  }
+
+  function listenForConfirm() {
+    if (!SR) return;
+    setPhase('confirming', 'Listening...', 'Say "yes" to copy or "no" to re-record');
+
+    confirmRec = new SR();
+    confirmRec.continuous = false;
+    confirmRec.interimResults = false;
+    confirmRec.lang = 'en-NZ';
+
+    confirmRec._active = true;
+
+    confirmRec.onresult = (e) => {
+      confirmRec._active = false;
+      const said = e.results[0][0].transcript.toLowerCase().trim();
+      stopConfirm();
+
+      const isYes = said.includes('yes') || said.includes('copy') || said.includes('yep') || said.includes('yeah') || said.includes('correct') || said.includes('good') || said.includes('done');
+      const isNo = said.includes('no') || said.includes('nope') || said.includes('again') || said.includes('redo') || said.includes('retry');
+
+      if (isYes) {
+        doCopy();
+      } else if (isNo) {
+        speak('Okay, go ahead and record again.', () => {
+          startRecording();
+        });
+      } else {
+        speak('Sorry, say yes to copy or no to try again.', () => {
+          listenForConfirm();
+        });
+      }
+    };
+
+    confirmRec.onerror = (e) => {
+      if (e.error === 'no-speech') {
+        // keep waiting silently, restart
+        if (confirmRec && confirmRec._active) {
+          try { confirmRec.stop(); } catch(x) {}
+        }
+      }
+    };
+
+    confirmRec.onend = () => {
+      if (phase === 'confirming' && confirmRec && confirmRec._active) {
+        try { confirmRec.start(); } catch(x) {}
+      }
+    };
+
+    try { confirmRec.start(); } catch(x) {}
+  }
+
+  function stopConfirm() {
+    if (confirmRec) {
+      confirmRec._active = false;
+      try { confirmRec.stop(); } catch(e) {}
+      confirmRec = null;
+    }
+  }
+
+  function doCopy() {
+    const text = outputEl.value.trim();
+    outputEl.focus();
+    outputEl.select();
+    outputEl.setSelectionRange(0, 99999);
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch(e) {}
+    if (!ok) navigator.clipboard.writeText(text).catch(() => {});
+
+    copyBtn.textContent = 'Copied!';
+    copyBtn.classList.add('copied');
+    setTimeout(() => { copyBtn.textContent = 'Copy'; copyBtn.classList.remove('copied'); }, 2500);
+
+    speak('Copied. You can paste it into Claude now.', () => {
+      setPhase('idle', 'Click to start', '');
+      orbLabel.classList.add('active');
+    });
+    setPhase('speaking', 'Copying...', 'Ready to paste into Claude');
+  }
+
+  // Main recording
+  function startRecording() {
+    if (!SR) { alert('Please use Google Chrome.'); return; }
+    finalText = '';
+    interimText = '';
+    outputEl.value = '';
+    outputEl.classList.remove('has-text');
+    wordcountEl.textContent = '';
+
+    mainRec = new SR();
+    mainRec.continuous = true;
+    mainRec.interimResults = true;
+    mainRec.lang = 'en-NZ';
+
+    mainRec.onstart = () => setPhase('recording', 'Recording', 'Say "stop recording" when done');
+
+    mainRec.onresult = (e) => {
+      interimText = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          if (t.toLowerCase().includes('stop recording')) {
+            finalText = finalText.trimEnd();
+            updateOutput();
+            stopMainRec();
+            readbackThenConfirm();
+            return;
+          }
+          finalText += t + ' ';
+        } else {
+          if (!t.toLowerCase().includes('stop recording')) interimText += t;
+        }
+      }
+      updateOutput();
+    };
+
+    mainRec.onerror = (e) => { if (e.error !== 'no-speech') setPhase('idle', 'Error. Click to retry.', ''); };
+    mainRec.onend = () => { if (phase === 'recording') { try { mainRec.start(); } catch(x) {} } };
+
+    try { mainRec.start(); } catch(x) {}
+  }
+
+  function stopMainRec() {
+    if (mainRec) {
+      try { mainRec.stop(); } catch(e) {}
+      mainRec = null;
+    }
+    interimText = '';
+  }
+
+  function readbackThenConfirm() {
+    const text = outputEl.value.trim();
+    if (!text) {
+      speak('Nothing was recorded. Click the mic to try again.', () => {
+        setPhase('idle', 'Click to start', '');
+      });
+      return;
+    }
+    setPhase('speaking', 'Reading back', 'Listen and say yes or no after');
+    speak(text, () => {
+      askConfirm();
+    });
+  }
+
+  function updateOutput() {
+    const combined = (finalText + interimText).trim();
+    outputEl.value = combined;
+    outputEl.classList.toggle('has-text', combined.length > 0);
+    const words = combined.split(/\s+/).filter(w => w.length > 0).length;
+    wordcountEl.textContent = words > 0 ? words + ' words' : '';
+  }
+
+  // Orb click handles all phases
+  function orbClicked() {
+    if (phase === 'recording') {
+      stopMainRec();
+      readbackThenConfirm();
+    } else if (phase === 'speaking') {
+      speechSynthesis.cancel();
+      listenForConfirm();
+    } else if (phase === 'confirming') {
+      stopConfirm();
+      setPhase('idle', 'Click to start', '');
+    } else {
+      startRecording();
+    }
+  }
+
+  function manualRead() {
+    const text = outputEl.value.trim();
+    if (!text) return;
+    stopConfirm();
+    stopMainRec();
+    setPhase('speaking', 'Reading back', '');
+    speak(text, () => askConfirm());
+  }
+
+  function manualCopy() {
+    stopConfirm();
+    doCopy();
+  }
+
+  function clearAll() {
+    speechSynthesis.cancel();
+    stopConfirm();
+    stopMainRec();
+    finalText = '';
+    interimText = '';
+    outputEl.value = '';
+    outputEl.classList.remove('has-text');
+    wordcountEl.textContent = '';
+    setPhase('idle', 'Click to start', '');
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space' && e.target === document.body) {
+      e.preventDefault();
+      orbClicked();
+    }
+  });
+</script>
+</body>
+</html>
